@@ -1,0 +1,11 @@
+# Ejecutables
+*.o
+*.exe
+ada_p1
+verificar_semilla
+test_runner
+
+# Archivos de sistema y entorno
+.DS_Store
+.vscode/
+.idea/
