@@ -4,6 +4,7 @@
 ada_p1
 verificar_semilla
 test_runner
+build/
 
 # Archivos de sistema y entorno
 .DS_Store
