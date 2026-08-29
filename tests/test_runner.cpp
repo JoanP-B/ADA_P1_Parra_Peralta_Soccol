@@ -4,27 +4,29 @@
 #include <string>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include "../src/fb_bruteforce.hpp"
 #include "../src/bt_backtracking.hpp"
 
 // Generador congruencial lineal para la semilla 3772 del equipo
 std::vector<std::string> generar_contrasenas_equipo() {
-    long long semilla = 3772; // Calculada previamente
+    long long semilla = 3772; // Calculada determinísticamente
     long long x = semilla;
     
     std::string A1 = "abcdefghijklmnopqrstuvwxyz";
     std::string A2 = "abcdefghijklmnopqrstuvwxyz0123456789";
     
-    std::vector<int> longitudes = {4, 4, 5, 5, 6};
+    // Ajustado a std::size_t para coherencia de tipos en C++17
+    std::vector<std::size_t> longitudes = {4, 4, 5, 5, 6};
     std::vector<std::string> alfabetos = {A1, A2, A1, A2, A1};
     std::vector<std::string> contrasenas;
 
-    for (size_t i = 0; i < 5; ++i) {
+    for (std::size_t i = 0; i < 5; ++i) {
         std::string pwd = "";
         std::string alf = alfabetos[i];
-        for (int j = 0; j < longitudes[i]; ++j) {
-            x = (1103515245 * x + 12345) % 2147483648LL; // 2^31
-            pwd += alf[x % alf.size()];
+        for (std::size_t j = 0; j < longitudes[i]; ++j) {
+            x = (1103515245LL * x + 12345LL) % 2147483648LL; // 2^31
+            pwd += alf[static_cast<std::size_t>(x) % alf.size()];
         }
         contrasenas.push_back(pwd);
     }
@@ -40,13 +42,13 @@ void ejecutar_experimentos_fb() {
     std::string A1 = "abcdefghijklmnopqrstuvwxyz";
     std::string A2 = "abcdefghijklmnopqrstuvwxyz0123456789";
     std::vector<std::string> alfabetos = {A1, A2, A1, A2, A1};
-    std::vector<size_t> longitudes = {4, 4, 5, 5, 6};
+    std::vector<std::size_t> longitudes = {4, 4, 5, 5, 6};
 
-    for (size_t i = 0; i < pwds.size(); ++i) {
+    for (std::size_t i = 0; i < pwds.size(); ++i) {
         std::string pwd = pwds[i];
         std::string hash = fb::sha256(pwd);
         std::string alf = alfabetos[i];
-        size_t len = longitudes[i];
+        std::size_t len = longitudes[i];
 
         // 1. Ejecución Fuerza Bruta Pura
         auto res_fb = fb::ataque_fuerza_bruta(hash, alf, 1, len);
@@ -75,7 +77,7 @@ void ejecutar_experimentos_bt() {
     std::ofstream csv("results/tiempos_bt.csv");
     csv << "variante,longitud,poda_activa,nodos_visitados,nodos_generados,soluciones,tiempo_us,porcentaje_reduccion\n";
 
-    // Mínimo 5 variantes exigidas por la Sección 9.2 de la guía
+    // 5 variantes exigidas por la Sección 9.2 de la guía
     std::vector<bt::PoliticaConfig> politicas = {
         {8, 3, 1, 2, 1, true},  // (i) Política completa del equipo (n=8)
         {6, 3, 1, 2, 1, true},  // (ii) Misma política (n=6)
@@ -88,7 +90,7 @@ void ejecutar_experimentos_bt() {
         "equipo_n8", "equipo_n6", "equipo_n10", "relajada_n8", "sin_restricciones_n6"
     };
 
-    for (size_t i = 0; i < politicas.size(); ++i) {
+    for (std::size_t i = 0; i < politicas.size(); ++i) {
         bt::BacktrackingEngine engine(politicas[i]);
         
         // Con poda
@@ -116,7 +118,7 @@ int main() {
         std::cout << "    SUITE DE PRUEBAS Y RECOLECCION DE DATOS (ADA P1)  \n";
         std::cout << "=====================================================\n";
 
-        // Validación previa de la Instancia de Referencia (Sección 9.1 de la guía)
+        // Validación previa de Instancia de Referencia
         std::string hash_ref = "8d51feb34e3e69f6fa6dffc577e2c60490cf9a7fcd835f9f6af1505b71d74773";
         std::string A2 = "abcdefghijklmnopqrstuvwxyz0123456789";
         auto ref_test = fb::ataque_fuerza_bruta(hash_ref, A2, 5, 5);
