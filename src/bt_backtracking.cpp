@@ -73,7 +73,6 @@ void BacktrackingEngine::resolver_sin_poda(std::string& actual, ResultadoBT& res
     res.nodos_visitados++;
 
     if (actual.length() == politica.longitud) {
-        res.nodos_generados++;
         if (es_factible(actual, actual.length())) {
             res.soluciones_encontradas++;
         }
@@ -82,6 +81,7 @@ void BacktrackingEngine::resolver_sin_poda(std::string& actual, ResultadoBT& res
 
     for (char c : alfabeto_base) {
         actual.push_back(c);
+        res.nodos_generados++; // Contar el nodo al generarlo
         resolver_sin_poda(actual, res);
         actual.pop_back();
     }
@@ -105,7 +105,10 @@ ResultadoBT BacktrackingEngine::resolver(bool usar_poda) {
 
     // Cálculo del porcentaje de reducción del espacio explorado
     if (usar_poda && res.nodos_generados > 0) {
-        double nodos_totales_teoricos = std::pow(alfabeto_base.size(), politica.longitud);
+        double nodos_totales_teoricos = 0.0;
+        for (std::size_t k = 0; k <= politica.longitud; ++k) {
+            nodos_totales_teoricos += std::pow(alfabeto_base.size(), k);
+        }
         res.porcentaje_reduccion = (1.0 - (static_cast<double>(res.nodos_visitados) / nodos_totales_teoricos)) * 100.0;
     }
 

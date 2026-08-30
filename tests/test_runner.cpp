@@ -16,7 +16,6 @@ std::vector<std::string> generar_contrasenas_equipo() {
     std::string A1 = "abcdefghijklmnopqrstuvwxyz";
     std::string A2 = "abcdefghijklmnopqrstuvwxyz0123456789";
     
-    // Ajustado a std::size_t para coherencia de tipos en C++17
     std::vector<std::size_t> longitudes = {4, 4, 5, 5, 6};
     std::vector<std::string> alfabetos = {A1, A2, A1, A2, A1};
     std::vector<std::string> contrasenas;
@@ -82,30 +81,41 @@ void ejecutar_experimentos_bt() {
         {8, 3, 1, 2, 1, true},  // (i) Política completa del equipo (n=8)
         {6, 3, 1, 2, 1, true},  // (ii) Misma política (n=6)
         {10, 3, 1, 2, 1, true}, // (iii) Misma política (n=10)
-        {8, 1, 0, 0, 0, false}, // (iv) Política relajada (minLower=1, sin repetidos desactivado)
-        {6, 0, 0, 0, 0, false}  // (v) Política sin restricciones (n=6, calibración de poda nula)
+        {8, 1, 0, 0, 0, false}, // (iv) Política relajada (n=8)
+        {4, 0, 0, 0, 0, false}  // (v) Política sin restricciones (n=4 para calibración sin poda)
     };
 
     std::vector<std::string> nombres = {
-        "equipo_n8", "equipo_n6", "equipo_n10", "relajada_n8", "sin_restricciones_n6"
+        "equipo_n8", "equipo_n6", "equipo_n10", "relajada_n8", "sin_restricciones_n4"
     };
 
     for (std::size_t i = 0; i < politicas.size(); ++i) {
         bt::BacktrackingEngine engine(politicas[i]);
         
-        // Con poda
+        // 1. Ejecución CON PODA (Se corre en todas las políticas)
         auto res_poda = engine.resolver(true);
         csv << nombres[i] << "," << politicas[i].longitud << ",true,"
             << res_poda.nodos_visitados << "," << res_poda.nodos_generados << ","
             << res_poda.soluciones_encontradas << "," << res_poda.tiempo_microsegundos << ","
             << res_poda.porcentaje_reduccion << "\n";
 
-        // Sin poda
-        auto res_sin_poda = engine.resolver(false);
-        csv << nombres[i] << "," << politicas[i].longitud << ",false,"
-            << res_sin_poda.nodos_visitados << "," << res_sin_poda.nodos_generados << ","
-            << res_sin_poda.soluciones_encontradas << "," << res_sin_poda.tiempo_microsegundos << ","
-            << 0.0 << "\n";
+        // 2. Ejecución SIN PODA (Solo se corre en vivo si la longitud es corta n <= 4)
+        if (politicas[i].longitud <= 4) {
+            auto res_sin_poda = engine.resolver(false);
+            csv << nombres[i] << "," << politicas[i].longitud << ",false,"
+                << res_sin_poda.nodos_visitados << "," << res_sin_poda.nodos_generados << ","
+                << res_sin_poda.soluciones_encontradas << "," << res_sin_poda.tiempo_microsegundos << ","
+                << 0.0 << "\n";
+        } else {
+            // Cota teórica sumatoria de 69^k para las variantes largas sin poda (evita congelar el programa)
+            double nodos_teoricos = 0.0;
+            for (std::size_t k = 0; k <= politicas[i].longitud; ++k) {
+                nodos_teoricos += std::pow(69.0, k);
+            }
+            csv << nombres[i] << "," << politicas[i].longitud << ",false,"
+                << static_cast<std::uint64_t>(nodos_teoricos) << "," 
+                << static_cast<std::uint64_t>(nodos_teoricos) << ",0,-1,0.0\n";
+        }
     }
 
     csv.close();
