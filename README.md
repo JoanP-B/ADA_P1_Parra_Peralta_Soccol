@@ -91,7 +91,7 @@ cd ADA_P1_Parra_Peralta_Soccol
 ### Paso 2: Compilar el programa principal
 
 ```bash
-g++ -std=c++17 -O2 -o ada_p1 src/main.cpp src/*.cpp
+g++ -std=c++17 -O2 -o ada_p1 src/*.cpp
 ```
 
 > **Nota**: Si se compila archivo por archivo en entornos Windows/MinGW, se puede utilizar: 
@@ -121,7 +121,7 @@ Para reproducir todos los experimentos de la Sección 9, generar las tablas CSV 
 ```bash
 ./test_runner
 ```
-*(Valida la instancia de referencia `abc12`, resuelve las 5 contraseñas del equipo en FB y evalúa las 5 variantes de política en BT).*
+*(Valida las instancias de referencia de FB y BT, resuelve las 5 contraseñas del equipo más dos configuraciones de calibración de FB, y evalúa las 5 variantes oficiales de BT con y sin poda).*
 
 **2. Generar todas las figuras y gráficas del informe técnico:**
 ```bash
@@ -161,7 +161,11 @@ El ejecutable `ada_p1` permite probar cualquier instancia individual o comparar 
 
 ---
 
-## 6. Créditos y Licencias
+## 6. Metodología de medición BT
+
+Para conservar las cinco configuraciones obligatorias de BT sin ocultar datos ni usar tiempos simulados, el motor agrupa prefijos equivalentes por sus contadores de categoría, la categoría del último carácter y la presencia de repeticiones consecutivas. Las multiplicidades calculan exactamente los nodos del árbol lógico de 69 símbolos y sus soluciones, tanto con poda como sin poda. Esta técnica permite medir las instancias de `n=8` y `n=10` de forma reproducible; `PSEUDOCODIGO_BT.md` documenta la recurrencia y sus límites.
+
+## 7. Créditos y Licencias
 
 - El archivo `src/third_party/picosha2.h` proviene del proyecto [PicoSHA2](https://github.com/okdshin/PicoSHA2) de okdshin y se distribuye bajo licencia de código abierto MIT.
 - Todos los algoritmos, funciones de factibilidad, controladores y generadores de datos experimentales fueron diseñados e implementados por los integrantes del equipo para el curso de Análisis y Diseño de Algoritmos (Universidad EAFIT).

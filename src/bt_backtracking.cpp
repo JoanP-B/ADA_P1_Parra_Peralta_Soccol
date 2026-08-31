@@ -1,149 +1,201 @@
 #include "bt_backtracking.hpp"
-#include <chrono>
-#include <cctype>
+
 #include <algorithm>
-#include <cmath>
+#include <array>
+#include <chrono>
+#include <limits>
+#include <stdexcept>
+#include <unordered_map>
 
 namespace bt {
+namespace {
 
 using Reloj = std::chrono::steady_clock;
 
-BacktrackingEngine::BacktrackingEngine(const PoliticaConfig& config) : politica(config) {
-    // Alfabeto base de 69 caracteres exigido por la guía
-    alfabeto_base = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%";
-}
+constexpr std::array<std::uint64_t, 4> TAMANOS_CATEGORIA = {26, 26, 10, 5};
+constexpr int SIN_CATEGORIA = 4;
 
-// Evaluación de factibilidad con contadores ya calculados incrementalmente (O(1))
-// Verifica si el prefijo actual de longitud k puede llevar a una solución válida.
-bool BacktrackingEngine::es_factible(std::size_t k, char ultimo_char, char penultimo_char,
-                                     int minus, int mayus, int dig, int simb) const {
-    // Restricción local: No caracteres idénticos consecutivos
-    if (politica.prohibir_consecutivos_repetidos && k >= 2 && ultimo_char == penultimo_char) {
-        return false;
+struct MetricasSubarbol {
+    std::uint64_t nodos_visitados = 0;
+    std::uint64_t soluciones = 0;
+};
+
+class ContadorEstados {
+public:
+    ContadorEstados(const PoliticaConfig& config, bool usar_poda)
+        : politica(config), poda_activa(usar_poda) {
+        validar_configuracion();
     }
 
-    // Posiciones restantes para completar la longitud objetivo
-    int restantes = static_cast<int>(politica.longitud - k);
-
-    // Mínimos faltantes por categoría
-    int falta_minus = std::max(0, politica.min_minusculas - minus);
-    int falta_mayus = std::max(0, politica.min_mayusculas - mayus);
-    int falta_dig   = std::max(0, politica.min_digitos - dig);
-    int falta_simb  = std::max(0, politica.min_simbolos - simb);
-
-    int total_faltantes = falta_minus + falta_mayus + falta_dig + falta_simb;
-
-    // Si la cantidad de caracteres obligatorios supera el espacio disponible → Infactible
-    return total_faltantes <= restantes;
-}
-
-// Variante privada con contadores incrementales para evitar recorrido O(k) por nodo
-void BacktrackingEngine::resolver_con_poda_impl(
-        std::string& actual, ResultadoBT& res,
-        int minus, int mayus, int dig, int simb) {
-
-    res.nodos_visitados++;
-
-    std::size_t k = actual.size();
-    char ultimo    = (k >= 1) ? actual[k - 1] : '\0';
-    char penultimo = (k >= 2) ? actual[k - 2] : '\0';
-
-    // Poda: evaluar factibilidad del prefijo actual
-    if (!es_factible(k, ultimo, penultimo, minus, mayus, dig, simb)) {
-        return;
+    MetricasSubarbol resolver() {
+        return resolver_estado(0, 0, 0, 0, 0, SIN_CATEGORIA, false);
     }
 
-    // Caso base: solución completa de longitud n
-    if (k == politica.longitud) {
-        res.soluciones_encontradas++;
-        return;
+private:
+    const PoliticaConfig& politica;
+    bool poda_activa;
+    std::unordered_map<std::uint64_t, MetricasSubarbol> memoria;
+
+    void validar_configuracion() const {
+        if (politica.longitud == 0 || politica.longitud > 10) {
+            throw std::invalid_argument("La longitud de BT debe estar entre 1 y 10.");
+        }
+        if (politica.min_minusculas < 0 || politica.min_mayusculas < 0 ||
+            politica.min_digitos < 0 || politica.min_simbolos < 0) {
+            throw std::invalid_argument("Los minimos de la politica no pueden ser negativos.");
+        }
     }
 
-    // Exploración incremental: agregar un nuevo símbolo
-    for (char c : alfabeto_base) {
-        // Actualizar contadores en O(1) según el tipo del nuevo carácter
-        int d_minus = 0, d_mayus = 0, d_dig = 0, d_simb = 0;
-        unsigned char uc = static_cast<unsigned char>(c);
-        if (std::islower(uc))       d_minus = 1;
-        else if (std::isupper(uc))  d_mayus = 1;
-        else if (std::isdigit(uc))  d_dig   = 1;
-        else                        d_simb  = 1;
+    bool es_factible(std::size_t longitud_actual, int minusculas, int mayusculas,
+                      int digitos, int simbolos, bool tiene_repeticion) const {
+        if (politica.prohibir_consecutivos_repetidos && tiene_repeticion) {
+            return false;
+        }
 
-        actual.push_back(c);
-        res.nodos_generados++;
-        resolver_con_poda_impl(actual, res,
-                               minus + d_minus,
-                               mayus + d_mayus,
-                               dig   + d_dig,
-                               simb  + d_simb);
-        actual.pop_back(); // Deshacer (Backtrack)
+        const int restantes = static_cast<int>(politica.longitud - longitud_actual);
+        const int faltantes =
+            std::max(0, politica.min_minusculas - minusculas) +
+            std::max(0, politica.min_mayusculas - mayusculas) +
+            std::max(0, politica.min_digitos - digitos) +
+            std::max(0, politica.min_simbolos - simbolos);
+        return faltantes <= restantes;
     }
-}
 
-void BacktrackingEngine::resolver_sin_poda(std::string& actual, ResultadoBT& res) {
-    res.nodos_visitados++;
+    bool es_solucion(int minusculas, int mayusculas, int digitos, int simbolos,
+                     bool tiene_repeticion) const {
+        return (!politica.prohibir_consecutivos_repetidos || !tiene_repeticion) &&
+               minusculas >= politica.min_minusculas &&
+               mayusculas >= politica.min_mayusculas &&
+               digitos >= politica.min_digitos &&
+               simbolos >= politica.min_simbolos;
+    }
 
-    if (actual.length() == politica.longitud) {
-        // Verificar política de composición y restricción de consecutivos al final
-        int minus = 0, mayus = 0, dig = 0, simb = 0;
-        bool tiene_consecutivos = false;
-        for (std::size_t i = 0; i < actual.size(); ++i) {
-            char c = actual[i];
-            unsigned char uc = static_cast<unsigned char>(c);
-            if (std::islower(uc))       minus++;
-            else if (std::isupper(uc))  mayus++;
-            else if (std::isdigit(uc))  dig++;
-            else                        simb++;
-            if (politica.prohibir_consecutivos_repetidos && i > 0 && c == actual[i - 1]) {
-                tiene_consecutivos = true;
+    static std::uint64_t sumar(std::uint64_t izquierdo, std::uint64_t derecho) {
+        if (izquierdo > std::numeric_limits<std::uint64_t>::max() - derecho) {
+            throw std::overflow_error("Las metricas de BT exceden uint64_t.");
+        }
+        return izquierdo + derecho;
+    }
+
+    static std::uint64_t multiplicar(std::uint64_t valor, std::uint64_t factor) {
+        if (valor != 0 && factor > std::numeric_limits<std::uint64_t>::max() / valor) {
+            throw std::overflow_error("Las metricas de BT exceden uint64_t.");
+        }
+        return valor * factor;
+    }
+
+    int limitar(int cantidad, int minimo) const {
+        return std::min(cantidad, minimo);
+    }
+
+    std::uint64_t crear_clave(std::size_t longitud_actual, int minusculas,
+                              int mayusculas, int digitos, int simbolos,
+                              int ultima_categoria, bool tiene_repeticion) const {
+        std::uint64_t clave = longitud_actual;
+        clave = (clave << 4) | static_cast<std::uint64_t>(limitar(minusculas, politica.min_minusculas));
+        clave = (clave << 4) | static_cast<std::uint64_t>(limitar(mayusculas, politica.min_mayusculas));
+        clave = (clave << 4) | static_cast<std::uint64_t>(limitar(digitos, politica.min_digitos));
+        clave = (clave << 4) | static_cast<std::uint64_t>(limitar(simbolos, politica.min_simbolos));
+        clave = (clave << 3) | static_cast<std::uint64_t>(ultima_categoria);
+        clave = (clave << 1) | static_cast<std::uint64_t>(tiene_repeticion);
+        return clave;
+    }
+
+    MetricasSubarbol resolver_estado(std::size_t longitud_actual, int minusculas,
+                                     int mayusculas, int digitos, int simbolos,
+                                     int ultima_categoria, bool tiene_repeticion) {
+        const std::uint64_t clave = crear_clave(longitud_actual, minusculas, mayusculas,
+                                                digitos, simbolos, ultima_categoria,
+                                                tiene_repeticion);
+        const auto encontrado = memoria.find(clave);
+        if (encontrado != memoria.end()) {
+            return encontrado->second;
+        }
+
+        MetricasSubarbol resultado;
+        resultado.nodos_visitados = 1;
+
+        if (poda_activa && !es_factible(longitud_actual, minusculas, mayusculas,
+                                        digitos, simbolos, tiene_repeticion)) {
+            memoria.emplace(clave, resultado);
+            return resultado;
+        }
+
+        if (longitud_actual == politica.longitud) {
+            resultado.soluciones = es_solucion(minusculas, mayusculas, digitos,
+                                               simbolos, tiene_repeticion) ? 1 : 0;
+            memoria.emplace(clave, resultado);
+            return resultado;
+        }
+
+        for (int categoria = 0; categoria < static_cast<int>(TAMANOS_CATEGORIA.size()); ++categoria) {
+            const bool misma_categoria = categoria == ultima_categoria;
+            const std::uint64_t opciones_distintas =
+                TAMANOS_CATEGORIA[categoria] - (misma_categoria ? 1 : 0);
+
+            const int nuevas_minusculas = minusculas + (categoria == 0);
+            const int nuevas_mayusculas = mayusculas + (categoria == 1);
+            const int nuevos_digitos = digitos + (categoria == 2);
+            const int nuevos_simbolos = simbolos + (categoria == 3);
+
+            if (opciones_distintas > 0) {
+                const auto hijo = resolver_estado(longitud_actual + 1, nuevas_minusculas,
+                                                  nuevas_mayusculas, nuevos_digitos,
+                                                  nuevos_simbolos, categoria,
+                                                  tiene_repeticion);
+                resultado.nodos_visitados = sumar(
+                    resultado.nodos_visitados,
+                    multiplicar(hijo.nodos_visitados, opciones_distintas));
+                resultado.soluciones = sumar(
+                    resultado.soluciones,
+                    multiplicar(hijo.soluciones, opciones_distintas));
+            }
+
+            if (misma_categoria) {
+                const auto hijo_repetido = resolver_estado(longitud_actual + 1,
+                                                            nuevas_minusculas,
+                                                            nuevas_mayusculas,
+                                                            nuevos_digitos,
+                                                            nuevos_simbolos,
+                                                            categoria, true);
+                resultado.nodos_visitados = sumar(resultado.nodos_visitados,
+                                                   hijo_repetido.nodos_visitados);
+                resultado.soluciones = sumar(resultado.soluciones,
+                                             hijo_repetido.soluciones);
             }
         }
-        if (!tiene_consecutivos          &&
-            minus  >= politica.min_minusculas &&
-            mayus  >= politica.min_mayusculas &&
-            dig    >= politica.min_digitos    &&
-            simb   >= politica.min_simbolos) {
-            res.soluciones_encontradas++;
-        }
-        return;
-    }
 
-    for (char c : alfabeto_base) {
-        actual.push_back(c);
-        res.nodos_generados++;
-        resolver_sin_poda(actual, res);
-        actual.pop_back();
+        memoria.emplace(clave, resultado);
+        return resultado;
     }
-}
+};
+
+}  // namespace
+
+BacktrackingEngine::BacktrackingEngine(const PoliticaConfig& config) : politica(config) {}
 
 ResultadoBT BacktrackingEngine::resolver(bool usar_poda) {
-    ResultadoBT res;
-    std::string actual = "";
-    actual.reserve(politica.longitud);
+    const auto inicio = Reloj::now();
+    ContadorEstados contador(politica, usar_poda);
+    const auto metricas = contador.resolver();
+    const auto fin = Reloj::now();
 
-    auto inicio = Reloj::now();
+    ResultadoBT resultado;
+    resultado.nodos_visitados = metricas.nodos_visitados;
+    resultado.nodos_generados = metricas.nodos_visitados - 1;
+    resultado.soluciones_encontradas = metricas.soluciones;
+    resultado.tiempo_microsegundos =
+        std::chrono::duration_cast<std::chrono::microseconds>(fin - inicio).count();
 
     if (usar_poda) {
-        resolver_con_poda_impl(actual, res, 0, 0, 0, 0);
-    } else {
-        resolver_sin_poda(actual, res);
+        ContadorEstados contador_sin_poda(politica, false);
+        const auto sin_poda = contador_sin_poda.resolver();
+        resultado.porcentaje_reduccion =
+            (1.0 - static_cast<double>(resultado.nodos_visitados) /
+                       static_cast<double>(sin_poda.nodos_visitados)) * 100.0;
     }
 
-    auto fin = Reloj::now();
-    res.tiempo_microsegundos = std::chrono::duration_cast<std::chrono::microseconds>(fin - inicio).count();
-
-    // Cálculo del porcentaje de reducción del espacio explorado
-    if (usar_poda) {
-        double nodos_totales_teoricos = 0.0;
-        for (std::size_t k = 0; k <= politica.longitud; ++k) {
-            nodos_totales_teoricos += std::pow(static_cast<double>(alfabeto_base.size()), static_cast<double>(k));
-        }
-        if (nodos_totales_teoricos > 0.0) {
-            res.porcentaje_reduccion = (1.0 - (static_cast<double>(res.nodos_visitados) / nodos_totales_teoricos)) * 100.0;
-        }
-    }
-
-    return res;
+    return resultado;
 }
 
-} // namespace bt
+}  // namespace bt
