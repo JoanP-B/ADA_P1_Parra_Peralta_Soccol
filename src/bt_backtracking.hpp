@@ -27,7 +27,10 @@ class BacktrackingEngine {
 public:
     explicit BacktrackingEngine(const PoliticaConfig& config);
 
+    // Calcula metricas exactas del arbol logico; no es una medicion de tiempo.
     ResultadoBT resolver(bool usar_poda);
+    // Recorre realmente el arbol y solo debe usarse en instancias acotadas.
+    ResultadoBT resolver_enumerativo(bool usar_poda);
 
 private:
     PoliticaConfig politica;

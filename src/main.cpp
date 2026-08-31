@@ -4,11 +4,15 @@
 #include <stdexcept>
 #include <limits>
 #include <cstddef>
+#include <algorithm>
 
 #include "fb_bruteforce.hpp"
 #include "bt_backtracking.hpp"
 
 namespace {
+
+// Define aquí el límite global de nodos para toda la interfaz (CLI)
+constexpr std::uint64_t LIMITE_INTERACTIVO_GLOBAL = 200000000000ULL;
 
 void imprimir_ayuda(const char* programa) {
     std::cout
@@ -110,7 +114,18 @@ int main(int argc, char* argv[]) {
             bool usar_poda = (leer_longitud(argv[7], "poda") == 1);
 
             bt::BacktrackingEngine engine(pol);
-            const auto res = engine.resolver(usar_poda);
+            
+            // 1. Estimación matemática previa
+            auto estimacion = engine.resolver(usar_poda);
+
+            bt::ResultadoBT res;
+            // 2. Si el espacio está dentro del límite permitido, ¡A EJECUTAR FÍSICAMENTE!
+            if (estimacion.nodos_visitados <= LIMITE_INTERACTIVO_GLOBAL) {
+                res = engine.resolver_enumerativo(usar_poda);
+            } else {
+                res = estimacion; // Cota teórica si supera el límite
+            }
+
             imprimir_resultado_bt(usar_poda ? "bt_con_poda" : "bt_sin_poda", res);
             return 0;
         }
@@ -124,8 +139,23 @@ int main(int argc, char* argv[]) {
             pol.min_simbolos = static_cast<int>(leer_longitud(argv[6], "min_symbol"));
 
             bt::BacktrackingEngine engine(pol);
-            const auto res_poda = engine.resolver(true);
-            const auto res_sin_poda = engine.resolver(false);
+            
+            auto estimacion_poda = engine.resolver(true);
+            auto estimacion_sin = engine.resolver(false);
+
+            bt::ResultadoBT res_poda, res_sin_poda;
+
+            if (estimacion_poda.nodos_visitados <= LIMITE_INTERACTIVO_GLOBAL) {
+                res_poda = engine.resolver_enumerativo(true);
+            } else {
+                res_poda = estimacion_poda;
+            }
+
+            if (estimacion_sin.nodos_visitados <= LIMITE_INTERACTIVO_GLOBAL) {
+                res_sin_poda = engine.resolver_enumerativo(false);
+            } else {
+                res_sin_poda = estimacion_sin;
+            }
 
             imprimir_resultado_bt("bt_con_poda", res_poda);
             std::cout << "---\n";

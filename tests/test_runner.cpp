@@ -11,6 +11,9 @@
 
 namespace {
 
+// Límite global de nodos compartidos por el ejecutor de experimentos de la suite
+constexpr std::uint64_t LIMITE_NODOS_EMPIRICOS_GLOBAL = 200000000000ULL; // Ajustar según conveniencia
+
 const std::string ALFABETO_A1 = "abcdefghijklmnopqrstuvwxyz";
 const std::string ALFABETO_A2 = "abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -48,6 +51,9 @@ std::vector<InstanciaFB> construir_experimentos_fb() {
 }
 
 double a_milisegundos(std::int64_t microsegundos) {
+    if (microsegundos < 0) {
+        return -1.0;
+    }
     return static_cast<double>(microsegundos) / 1000.0;
 }
 
@@ -105,13 +111,35 @@ void verificar_referencia_bt() {
 
 void escribir_fila_bt(std::ofstream& csv, const std::string& nombre,
                       const bt::PoliticaConfig& politica, bool poda_activa,
-                      const bt::ResultadoBT& resultado) {
+                      const std::string& medicion, const bt::ResultadoBT& resultado) {
     csv << nombre << ',' << politica.longitud << ','
         << (poda_activa ? "true" : "false") << ','
         << resultado.nodos_visitados << ',' << resultado.nodos_generados << ','
-        << resultado.soluciones_encontradas << ',' << resultado.tiempo_microsegundos << ','
+        << resultado.soluciones_encontradas << ',' << medicion << ','
+        << resultado.tiempo_microsegundos << ','
         << a_milisegundos(resultado.tiempo_microsegundos) << ','
         << resultado.porcentaje_reduccion << "\n";
+}
+
+bt::ResultadoBT obtener_resultado_bt(bt::BacktrackingEngine& motor, bool poda_activa,
+                                     std::string& medicion) {
+    // 1. Estimación matemática analítica previa
+    const auto cota_exacta = motor.resolver(poda_activa);
+
+    // 2. Si supera el umbral permitido, retorna la cota analítica con timeout (-1)
+    if (cota_exacta.nodos_visitados > LIMITE_NODOS_EMPIRICOS_GLOBAL) {
+        medicion = "cota_teorica_timeout";
+        return cota_exacta;
+    }
+
+    // 3. Si cabe en la cota permitida, ejecuta la medición física por enumeración directa
+    const auto medicion_empirica = motor.resolver_enumerativo(poda_activa);
+    if (medicion_empirica.nodos_visitados != cota_exacta.nodos_visitados ||
+        medicion_empirica.soluciones_encontradas != cota_exacta.soluciones_encontradas) {
+        throw std::runtime_error("La enumeracion directa no coincide con la cota exacta de BT.");
+    }
+    medicion = "empirica_enumerativa";
+    return medicion_empirica;
 }
 
 void ejecutar_experimentos_bt() {
@@ -122,7 +150,7 @@ void ejecutar_experimentos_bt() {
     }
 
     csv << "variante,longitud,poda_activa,nodos_visitados,nodos_generados,soluciones,"
-           "tiempo_us,tiempo_ms,porcentaje_reduccion\n";
+           "medicion,tiempo_us,tiempo_ms,porcentaje_reduccion\n";
     csv << std::fixed << std::setprecision(3);
 
     const std::vector<bt::PoliticaConfig> politicas = {
@@ -130,25 +158,52 @@ void ejecutar_experimentos_bt() {
         {6, 3, 2, 2, 1, true},
         {10, 3, 2, 2, 1, true},
         {8, 1, 0, 0, 0, true},
-        {6, 0, 0, 0, 0, true},
+        {6, 0, 0, 0, 0, false},
     };
     const std::vector<std::string> nombres = {
         "equipo_n8", "equipo_n6", "equipo_n10", "relajada_n8", "sin_restricciones_n6"};
 
     for (std::size_t indice = 0; indice < politicas.size(); ++indice) {
         bt::BacktrackingEngine motor(politicas[indice]);
-        const auto con_poda = motor.resolver(true);
-        const auto sin_poda = motor.resolver(false);
+        std::string medicion_con_poda;
+        std::string medicion_sin_poda;
+        const auto con_poda = obtener_resultado_bt(motor, true, medicion_con_poda);
+        const auto sin_poda = obtener_resultado_bt(motor, false, medicion_sin_poda);
 
         if (con_poda.soluciones_encontradas != sin_poda.soluciones_encontradas) {
             throw std::runtime_error("La poda cambio la cantidad de soluciones de BT.");
         }
 
-        escribir_fila_bt(csv, nombres[indice], politicas[indice], true, con_poda);
-        escribir_fila_bt(csv, nombres[indice], politicas[indice], false, sin_poda);
+        escribir_fila_bt(csv, nombres[indice], politicas[indice], true,
+                         medicion_con_poda, con_poda);
+        escribir_fila_bt(csv, nombres[indice], politicas[indice], false,
+                         medicion_sin_poda, sin_poda);
     }
 
-    std::cout << "    [OK] Se registraron 5 configuraciones de BT con y sin poda.\n";
+    const std::vector<bt::PoliticaConfig> calibraciones = {
+        {4, 1, 1, 1, 1, true}, {4, 2, 1, 1, 0, true},
+        {4, 1, 0, 1, 1, true}, {4, 1, 1, 0, 1, true},
+        {4, 0, 0, 0, 0, true},
+    };
+
+    for (std::size_t indice = 0; indice < calibraciones.size(); ++indice) {
+        bt::BacktrackingEngine motor(calibraciones[indice]);
+        std::string medicion_con_poda;
+        std::string medicion_sin_poda;
+        const auto con_poda = obtener_resultado_bt(motor, true, medicion_con_poda);
+        const auto sin_poda = obtener_resultado_bt(motor, false, medicion_sin_poda);
+        if (con_poda.soluciones_encontradas != sin_poda.soluciones_encontradas) {
+            throw std::runtime_error("La poda cambio una solucion de calibracion de BT.");
+        }
+
+        const std::string nombre = "calibracion_n4_" + std::to_string(indice + 1);
+        escribir_fila_bt(csv, nombre, calibraciones[indice], true,
+                         medicion_con_poda, con_poda);
+        escribir_fila_bt(csv, nombre, calibraciones[indice], false,
+                         medicion_sin_poda, sin_poda);
+    }
+
+    std::cout << "    [OK] Se registraron 5 variantes oficiales y 5 calibraciones BT.\n";
 }
 
 void verificar_referencia_fb() {

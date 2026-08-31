@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 namespace bt {
@@ -170,22 +172,97 @@ private:
     }
 };
 
+class EnumeradorDirecto {
+public:
+    EnumeradorDirecto(const PoliticaConfig& config, bool usar_poda)
+        : politica(config), poda_activa(usar_poda) {}
+
+    ResultadoBT resolver() {
+        const auto inicio = Reloj::now();
+        std::string actual;
+        actual.reserve(politica.longitud);
+        explorar(actual, 0, 0, 0, 0, false, resultado);
+        const auto fin = Reloj::now();
+        resultado.tiempo_microsegundos =
+            std::chrono::duration_cast<std::chrono::microseconds>(fin - inicio).count();
+        return resultado;
+    }
+
+private:
+    const PoliticaConfig& politica;
+    bool poda_activa;
+    ResultadoBT resultado;
+
+    bool es_factible(const std::string& actual, int minusculas, int mayusculas,
+                      int digitos, int simbolos, bool tiene_repeticion) const {
+        if (politica.prohibir_consecutivos_repetidos && tiene_repeticion) {
+            return false;
+        }
+
+        const int restantes = static_cast<int>(politica.longitud - actual.size());
+        const int faltantes =
+            std::max(0, politica.min_minusculas - minusculas) +
+            std::max(0, politica.min_mayusculas - mayusculas) +
+            std::max(0, politica.min_digitos - digitos) +
+            std::max(0, politica.min_simbolos - simbolos);
+        return faltantes <= restantes;
+    }
+
+    bool es_solucion(int minusculas, int mayusculas, int digitos, int simbolos,
+                     bool tiene_repeticion) const {
+        return (!politica.prohibir_consecutivos_repetidos || !tiene_repeticion) &&
+               minusculas >= politica.min_minusculas &&
+               mayusculas >= politica.min_mayusculas &&
+               digitos >= politica.min_digitos &&
+               simbolos >= politica.min_simbolos;
+    }
+
+    void explorar(std::string& actual, int minusculas, int mayusculas, int digitos,
+                  int simbolos, bool tiene_repeticion, ResultadoBT& metricas) {
+        ++metricas.nodos_visitados;
+        if (poda_activa && !es_factible(actual, minusculas, mayusculas, digitos,
+                                        simbolos, tiene_repeticion)) {
+            return;
+        }
+        if (actual.size() == politica.longitud) {
+            if (es_solucion(minusculas, mayusculas, digitos, simbolos, tiene_repeticion)) {
+                ++metricas.soluciones_encontradas;
+            }
+            return;
+        }
+
+        static const std::string alfabeto =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%";
+        for (const char caracter : alfabeto) {
+            const unsigned char valor = static_cast<unsigned char>(caracter);
+            const bool repeticion = tiene_repeticion ||
+                (!actual.empty() && actual.back() == caracter);
+            actual.push_back(caracter);
+            ++metricas.nodos_generados;
+            explorar(actual,
+                     minusculas + (std::islower(valor) ? 1 : 0),
+                     mayusculas + (std::isupper(valor) ? 1 : 0),
+                     digitos + (std::isdigit(valor) ? 1 : 0),
+                     simbolos + (!std::isalnum(valor) ? 1 : 0),
+                     repeticion, metricas);
+            actual.pop_back();
+        }
+    }
+};
+
 }  // namespace
 
 BacktrackingEngine::BacktrackingEngine(const PoliticaConfig& config) : politica(config) {}
 
 ResultadoBT BacktrackingEngine::resolver(bool usar_poda) {
-    const auto inicio = Reloj::now();
     ContadorEstados contador(politica, usar_poda);
     const auto metricas = contador.resolver();
-    const auto fin = Reloj::now();
 
     ResultadoBT resultado;
     resultado.nodos_visitados = metricas.nodos_visitados;
     resultado.nodos_generados = metricas.nodos_visitados - 1;
     resultado.soluciones_encontradas = metricas.soluciones;
-    resultado.tiempo_microsegundos =
-        std::chrono::duration_cast<std::chrono::microseconds>(fin - inicio).count();
+    resultado.tiempo_microsegundos = -1;
 
     if (usar_poda) {
         ContadorEstados contador_sin_poda(politica, false);
@@ -196,6 +273,11 @@ ResultadoBT BacktrackingEngine::resolver(bool usar_poda) {
     }
 
     return resultado;
+}
+
+ResultadoBT BacktrackingEngine::resolver_enumerativo(bool usar_poda) {
+    EnumeradorDirecto enumerador(politica, usar_poda);
+    return enumerador.resolver();
 }
 
 }  // namespace bt

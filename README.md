@@ -94,8 +94,8 @@ cd ADA_P1_Parra_Peralta_Soccol
 g++ -std=c++17 -O2 -o ada_p1 src/*.cpp
 ```
 
-> **Nota**: Si se compila archivo por archivo en entornos Windows/MinGW, se puede utilizar: 
-> `g++ -std=c++17 -O2 -o ada_p1 src/*.cpp`
+> **Nota**: Si se compila archivo por archivo en entornos Windows/MinGW, se puede utilizar el comando dado en la guia: 
+> `g++ -std=c++17 -O2 -o ada_p1 src/main.cpp src/*.cpp`
 
 ### Paso 3: Compilar la suite de pruebas automatizadas y utilidad de semilla
 
