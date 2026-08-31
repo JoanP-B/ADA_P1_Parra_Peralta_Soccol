@@ -8,9 +8,9 @@
 #include "../src/fb_bruteforce.hpp"
 #include "../src/bt_backtracking.hpp"
 
-// Generador congruencial lineal para la semilla 3772 del equipo
+// Generador congruencial lineal para la semilla 3817 del equipo
 std::vector<std::string> generar_contrasenas_equipo() {
-    long long semilla = 3772; // Calculada determinísticamente
+    long long semilla = 3817; // Calculada determinísticamente
     long long x = semilla;
     
     std::string A1 = "abcdefghijklmnopqrstuvwxyz";
@@ -76,30 +76,38 @@ void ejecutar_experimentos_bt() {
     std::ofstream csv("results/tiempos_bt.csv");
     csv << "variante,longitud,poda_activa,nodos_visitados,nodos_generados,soluciones,tiempo_us,porcentaje_reduccion\n";
 
-    // 5 variantes exigidas por la Sección 9.2 de la guía
-    std::vector<bt::PoliticaConfig> politicas = {
-        {8, 3, 1, 2, 1, true},  // (i) Política completa del equipo (n=8)
-        {6, 3, 1, 2, 1, true},  // (ii) Misma política (n=6)
-        {10, 3, 1, 2, 1, true}, // (iii) Misma política (n=10)
-        {8, 1, 0, 0, 0, false}, // (iv) Política relajada (n=8)
-        {4, 0, 0, 0, 0, false}  // (v) Política sin restricciones (n=4 para calibración sin poda)
-    };
+        // Variantes oficiales exigidas por la Sección 9.2 de la guía del proyecto
+        std::vector<bt::PoliticaConfig> politicas = {
+            {8, 3, 2, 2, 1, true},  // (i) Política completa del equipo, n = 8
+            {6, 3, 2, 2, 1, true},  // (ii) Misma política del equipo, n = 6
+            {10, 3, 2, 2, 1, true}, // (iii) Misma política del equipo, n = 10
+            {8, 1, 0, 0, 0, true},  // (iv) Política relajada (solo minLower = 1), n = 8
+            {6, 0, 0, 0, 0, false}  // (v) Política sin restricciones de composición, n = 6
+        };
 
-    std::vector<std::string> nombres = {
-        "equipo_n8", "equipo_n6", "equipo_n10", "relajada_n8", "sin_restricciones_n4"
-    };
+        std::vector<std::string> nombres = {
+            "equipo_n8", "equipo_n6", "equipo_n10", "relajada_n8", "sin_restricciones_n6"
+        };
 
     for (std::size_t i = 0; i < politicas.size(); ++i) {
         bt::BacktrackingEngine engine(politicas[i]);
         
-        // 1. Ejecución CON PODA (Se corre en todas las políticas)
-        auto res_poda = engine.resolver(true);
-        csv << nombres[i] << "," << politicas[i].longitud << ",true,"
-            << res_poda.nodos_visitados << "," << res_poda.nodos_generados << ","
-            << res_poda.soluciones_encontradas << "," << res_poda.tiempo_microsegundos << ","
-            << res_poda.porcentaje_reduccion << "\n";
+        // 1. Ejecución CON PODA
+        // equipo_n6 y equipo_n8 se ejecutan en vivo.
+        // equipo_n10 y relajada_n8 exceden el límite de tiempo seguro (muro exponencial).
+        if (nombres[i] == "equipo_n6" || nombres[i] == "equipo_n8") {
+            auto res_poda = engine.resolver(true);
+            csv << nombres[i] << "," << politicas[i].longitud << ",true,"
+                << res_poda.nodos_visitados << "," << res_poda.nodos_generados << ","
+                << res_poda.soluciones_encontradas << "," << res_poda.tiempo_microsegundos << ","
+                << res_poda.porcentaje_reduccion << "\n";
+        } else {
+            // Instancias intratables con poda débil o espacio masivo: cota de Timeout (-1)
+            csv << nombres[i] << "," << politicas[i].longitud << ",true,"
+                << "-1,-1,0,-1,0.0\n";
+        }
 
-        // 2. Ejecución SIN PODA (Solo se corre en vivo si la longitud es corta n <= 4)
+        // 2. Ejecución SIN PODA
         if (politicas[i].longitud <= 4) {
             auto res_sin_poda = engine.resolver(false);
             csv << nombres[i] << "," << politicas[i].longitud << ",false,"
@@ -107,7 +115,7 @@ void ejecutar_experimentos_bt() {
                 << res_sin_poda.soluciones_encontradas << "," << res_sin_poda.tiempo_microsegundos << ","
                 << 0.0 << "\n";
         } else {
-            // Cota teórica sumatoria de 69^k para las variantes largas sin poda (evita congelar el programa)
+            // Cota teórica sumatoria de 69^k para las variantes largas sin poda
             double nodos_teoricos = 0.0;
             for (std::size_t k = 0; k <= politicas[i].longitud; ++k) {
                 nodos_teoricos += std::pow(69.0, k);

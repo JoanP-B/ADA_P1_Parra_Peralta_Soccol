@@ -23,7 +23,7 @@ void imprimir_ayuda(const char* programa) {
         << "  " << programa << " bt-comparar <longitud> <min_lower> <min_upper> <min_digit> <min_symbol>\n\n"
         << "Ejemplos:\n"
         << "  " << programa << " hash abc12\n"
-        << "  " << programa << " bt 8 3 1 2 1 1\n";
+        << "  " << programa << " bt 8 3 2 2 1 1\n";
 }
 
 std::size_t leer_longitud(const std::string& texto, const char* nombre) {

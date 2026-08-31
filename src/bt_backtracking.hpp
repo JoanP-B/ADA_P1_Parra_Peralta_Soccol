@@ -10,8 +10,8 @@ namespace bt {
 
 struct PoliticaConfig {
     std::size_t longitud = 8;
-    int min_minusculas = 3; // Basado en Semilla 3772
-    int min_mayusculas = 1;
+    int min_minusculas = 3; // Basado en Semilla 3817
+    int min_mayusculas = 2;
     int min_digitos = 2;
     int min_simbolos = 1;
     bool prohibir_consecutivos_repetidos = true;
@@ -30,11 +30,13 @@ private:
     std::string alfabeto_base;
     PoliticaConfig politica;
 
-    // Evaluación booleana en prefijos parciales (k < n)
-    bool es_factible(const std::string& prefijo, std::size_t k) const;
+    // Evaluación de factibilidad con contadores incrementales (O(1) por nodo)
+    bool es_factible(std::size_t k, char ultimo_char, char penultimo_char,
+                     int minus, int mayus, int dig, int simb) const;
 
-    // Recursión incremental con Poda
-    void resolver_con_poda(std::string& actual, ResultadoBT& res);
+    // Recursión incremental con Poda (usa contadores pasados por parámetro)
+    void resolver_con_poda_impl(std::string& actual, ResultadoBT& res,
+                                int minus, int mayus, int dig, int simb);
 
     // Recursión exhaustiva sin Poda (para calibración de la rúbrica)
     void resolver_sin_poda(std::string& actual, ResultadoBT& res);
